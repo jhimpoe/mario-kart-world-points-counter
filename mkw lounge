@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mario Kart World - Scoring</title>
+  <style>
+    body {
+      display: flex;
+      gap: 40px;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+
+      /* Background image */
+      background-image: url('https://cdn-image-f3580964b8e711e5b95f2ff191a1c838.baas.nintendo.com/1/cf71ba0033a06caa');
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: cover;
+      background-attachment: fixed;
+
+      /* To keep background subtle */
+      background-color: rgba(255, 255, 255, 0.8); /* fallback */
+      backdrop-filter: blur(5px);
+      /* Optional: add a white-ish overlay to reduce distraction */
+      position: relative;
+    }
+
+    /* Overlay effect to reduce distraction */
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.8);
+      z-index: -1;
+      pointer-events: none;
+      backdrop-filter: blur(5px);
+    }
+
+    #mainContent {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    #overview {
+      width: 220px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: fit-content;
+      background: rgba(249, 249, 249, 0.9);
+      border-radius: 8px;
+      box-shadow: 0 0 6px rgba(0,0,0,0.05);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    table { border-collapse: collapse; margin: 10px 0; }
+    td, th { border: 1px solid #ccc; padding: 5px; text-align: center; }
+    input { width: 60px; }
+    textarea { width: 300px; height: 150px; }
+    #overview h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    #overviewList {
+      white-space: pre-wrap;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div id="mainContent">
+    <h2>Mario Kart World - Scoring</h2>
+
+    <h3>Enter Names (one per line, with MMR)</h3>
+    <textarea id="nameList" placeholder="e.g.&#10;1. SrJimbow (4119 MMR)&#10;2. Uni_bunnyy (4027 MMR)&#10;..."></textarea><br>
+    <button onclick="loadNames()">Load Names</button>
+
+    <table id="scoreTable">
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th>Starting Points</th>
+          <script>
+            for (let i = 1; i <= 12; i++) {
+              document.write('<th>Race ' + i + '</th>');
+            }
+          </script>
+          <th>Total</th>
+          <th>MMR</th>
+        </tr>
+      </thead>
+      <tbody id="playersBody"></tbody>
+      <tfoot>
+        <tr>
+          <td colspan="14" style="text-align:right; font-weight:bold;">Total points of all players:</td>
+          <td id="grandTotal" style="font-weight:bold;">0</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <h3>Bonus Points on Disconnect</h3>
+    <label>Race: 
+      <select id="disconnectRace">
+        <script>
+          for (let i = 1; i <= 12; i++) {
+            document.write('<option value="' + i + '">Race ' + i + '</option>');
+          }
+        </script>
+      </select>
+    </label>
+    <label>1st place: 
+      <select id="firstPlace"></select>
+    </label>
+    <label>2nd place: 
+      <select id="secondPlace"></select>
+    </label>
+    <br><br>
+    <button onclick="applyBonus()">Give Extra Points</button>
+    <button onclick="calculateTotals()">Calculate Total</button>
+  </div>
+
+  <div id="overview">
+    <h3>Players Total Points</h3>
+    <pre id="overviewList">Load players first...</pre>
+  </div>
+
+  <script>
+    const playersCount = 12;
+    const racesCount = 12;
+    const playersBody = document.getElementById("playersBody");
+    const firstSelect = document.getElementById("firstPlace");
+    const secondSelect = document.getElementById("secondPlace");
+    const grandTotalCell = document.getElementById("grandTotal");
+    const overviewList = document.getElementById("overviewList");
+
+    const playerNames = [];
+    const playerMMRs = [];
+
+    for (let i = 0; i < playersCount; i++) {
+      const row = document.createElement("tr");
+
+      const nameCell = document.createElement("td");
+      const nameInput = document.createElement("input");
+      nameInput.placeholder = "Player " + (i + 1);
+      nameInput.id = "name" + i;
+      nameInput.addEventListener("input", () => {
+        updatePlayerNames();
+        calculateTotals();
+      });
+      nameCell.appendChild(nameInput);
+      row.appendChild(nameCell);
+
+      const startPointsCell = document.createElement("td");
+      const startPointsInput = document.createElement("input");
+      startPointsInput.type = "number";
+      startPointsInput.min = 0;
+      startPointsInput.value = "";
+      startPointsInput.id = `startpoints-${i}`;
+      startPointsInput.addEventListener("input", calculateTotals);
+      startPointsCell.appendChild(startPointsInput);
+      row.appendChild(startPointsCell);
+
+      for (let j = 0; j < racesCount; j++) {
+        const cell = document.createElement("td");
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = 0;
+        input.id = `score-${i}-${j}`;
+        input.addEventListener("input", () => {
+          updateCellColor(i, j);
+          calculateTotals();
+        });
+        cell.appendChild(input);
+        row.appendChild(cell);
+      }
+
+      const totalCell = document.createElement("td");
+      totalCell.id = "total-" + i;
+      totalCell.innerText = "0";
+      row.appendChild(totalCell);
+
+      const mmrCell = document.createElement("td");
+      mmrCell.id = "mmr-" + i;
+      mmrCell.innerText = "-";
+      row.appendChild(mmrCell);
+
+      playersBody.appendChild(row);
+    }
+
+    function loadNames() {
+      const rawLines = document.getElementById("nameList").value.trim().split(/\r?\n/);
+      const cleaned = rawLines.map(line => {
+        const nameMatch = line.replace(/^\d+\.\s*/, '').replace(/\(.*?\)/g, '').trim();
+        const mmrMatch = line.match(/\((\d+)\s*MMR\)/i);
+        return {
+          name: nameMatch,
+          mmr: mmrMatch ? parseInt(mmrMatch[1]) : null
+        };
+      });
+
+      for (let i = 0; i < playersCount; i++) {
+        const input = document.getElementById("name" + i);
+        const mmrCell = document.getElementById("mmr-" + i);
+        if (cleaned[i]) {
+          input.value = cleaned[i].name;
+          mmrCell.innerText = cleaned[i].mmr !== null ? cleaned[i].mmr : "-";
+          playerMMRs[i] = cleaned[i].mmr;
+        } else {
+          input.value = "";
+          mmrCell.innerText = "-";
+          playerMMRs[i] = null;
+        }
+      }
+
+      updatePlayerNames();
+      calculateTotals();
+    }
+
+    function updatePlayerNames() {
+      const currentFirst = firstSelect.value;
+      const currentSecond = secondSelect.value;
+      firstSelect.innerHTML = "";
+      secondSelect.innerHTML = "";
+
+      for (let i = 0; i < playersCount; i++) {
+        const name = document.getElementById("name" + i).value || "Player " + (i + 1);
+        playerNames[i] = name;
+        const opt1 = new Option(name, i);
+        const opt2 = new Option(name, i);
+        firstSelect.add(opt1);
+        secondSelect.add(opt2);
+      }
+
+      if ([...firstSelect.options].some(opt => opt.value === currentFirst)) {
+        firstSelect.value = currentFirst;
+      }
+      if ([...secondSelect.options].some(opt => opt.value === currentSecond)) {
+        secondSelect.value = currentSecond;
+      }
+    }
+
+    function applyBonus() {
+      updatePlayerNames();
+      const raceIndex = parseInt(document.getElementById("disconnectRace").value) - 1;
+      const firstIndex = parseInt(firstSelect.value);
+      const secondIndex = parseInt(secondSelect.value);
+
+      for (let i = 0; i < playersCount; i++) {
+        const cell = document.getElementById(`score-${i}-${raceIndex}`).parentElement;
+        cell.style.backgroundColor = "";
+      }
+
+      const firstInput = document.getElementById(`score-${firstIndex}-${raceIndex}`);
+      firstInput.value = parseInt(firstInput.value || 0) + 3;
+
+      const secondInput = document.getElementById(`score-${secondIndex}-${raceIndex}`);
+      secondInput.value = parseInt(secondInput.value || 0) + 2;
+
+      for (let i = 0; i < playersCount; i++) {
+        if (i !== firstIndex && i !== secondIndex) {
+          const input = document.getElementById(`score-${i}-${raceIndex}`);
+          if (input.value === "" || input.value === null) {
+            input.value = 1;
+          }
+        }
+        updateCellColor(i, raceIndex);
+      }
+
+      calculateTotals();
+    }
+
+    function updateCellColor(i, j) {
+      const input = document.getElementById(`score-${i}-${j}`);
+      const cell = input.parentElement;
+      const val = parseInt(input.value);
+
+      if (val === 3) {
+        cell.style.backgroundColor = "lightgreen";
+      } else if (val === 2) {
+        cell.style.backgroundColor = "#fff8b3";
+      } else if (val === 1) {
+        cell.style.backgroundColor = "#cccccc"; // brighter gray
+      } else {
+        cell.style.backgroundColor = "";
+      }
+    }
+
+    function calculateTotals() {
+      updatePlayerNames();
+      let grandTotal = 0;
+      let overviewText = "!submit 1 Q\n";
+      for (let i = 0; i < playersCount; i++) {
+        let total = 0;
+        const startPointsInput = document.getElementById(`startpoints-${i}`);
+        const startPoints = parseInt(startPointsInput.value) || 0;
+
+        for (let j = 0; j < racesCount; j++) {
+          const input = document.getElementById(`score-${i}-${j}`);
+          total += parseInt(input.value || 0);
+          updateCellColor(i, j);
+        }
+
+        total += startPoints;
+        document.getElementById("total-" + i).innerText = total;
+        grandTotal += total;
+
+        const name = playerNames[i] || ("Player " + (i + 1));
+        overviewText += name + " " + total + "\n";
+      }
+      grandTotalCell.innerText = grandTotal;
+      overviewList.textContent = overviewText.trim();
+    }
+
+    updatePlayerNames();
+  </script>
+</body>
+</html>
